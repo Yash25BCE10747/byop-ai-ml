@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timezone
 
 app = Flask(__name__)
-app.secret_key = "saanvi_123"
+app.secret_key = "yash_25"
 app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///task.db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -36,13 +36,22 @@ class Wellness(db.Model):
     note = db.Column(db.String(500))
     date_created = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
+def predict_stress(lecture_count):
+    if lecture_count <= 2:
+        return "Relaxed 😌"
+    elif lecture_count <= 5:
+        return "Moderate 😐"
+    else:
+        return "Overloaded 😟"
 
 
 @app.route('/')
 def index():
     task_count = LectureTask.query.count()
     latest_wellness = Wellness.query.order_by(Wellness.id.desc()).first()
-    return render_template('index.html', task_count=task_count, mood=latest_wellness)
+    stress_level = predict_stress(task_count)
+
+    return render_template('index.html', task_count=task_count, mood=latest_wellness, stress_level=stress_level)
 
 @app.route('/schedule', methods=['GET', 'POST'])
 def schedule():
@@ -104,22 +113,35 @@ def attendance():
 
 @app.route('/attendance_report')
 def attendance_report():
-    students = Student.query.all()
+    batches = db.session.query(Student.batch).distinct().all()
+    selected_batch = request.args.get('batch')
+    if selected_batch:
+        students = Student.query.filter_by(batch=selected_batch).all()
+    else:
+        students = []
     report = []
     
     for student in students:
         total_days = Attendance.query.filter_by(student_id=student.id).count()
         present_days = Attendance.query.filter_by(student_id=student.id, status='Present').count()
         percentage = (present_days / total_days * 100) if total_days > 0 else 0
-        
+        if percentage >= 75:
+            performance = "Good"
+        elif percentage >= 50:
+            performance = "Average"
+        else:
+            performance = "Poor"
+
         report.append({
-            'name': student.name,
-            'batch': student.batch,
-            'percentage': round(percentage, 1),
-            'total': total_days
-        })
+        'name': student.name,
+        'batch': student.batch,
+        'percentage': round(percentage, 1),
+        'total': total_days,
+        'performance': performance   
+    })
+
         
-    return render_template('report.html', report=report)
+    return render_template('report.html', report=report, batches=batches, selected_batch=selected_batch)
 
 
 @app.route('/wellness', methods=['GET', 'POST'])
